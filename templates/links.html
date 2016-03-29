@@ -2,4 +2,9 @@
 {% block content %}
     <h1>{{name}}'s links</h1>
     <p><a href="/add">Add link</a></p>
+    {% for link in links %}
+        <h3>{{link.1}}</h3>
+        <p>{{link.2}}</p>
+        <p><a href="{{link.3}}">{{link.3}}</a></p>
+    {% endfor %}
 {% endblock %}
