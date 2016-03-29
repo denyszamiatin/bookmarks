@@ -2,6 +2,7 @@
 from flask import Flask, render_template, request, redirect, g
 import oursql
 
+
 app = Flask(__name__)
 
 
@@ -51,9 +52,9 @@ def register():
     return render_template('registration.html', message=message)
 
 
-@app.route('/links')
-def links():
-    return "Links"
+@app.route('/links/<name>')
+def links(name):
+    return render_template("links.html", name=name)
 
 
 if __name__ == '__main__':

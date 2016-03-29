@@ -4,3 +4,11 @@ create table user (
     email varchar(200),
     passwd varchar(128)
 );
+create table link (
+    id int primary key auto_increment,
+    user int,
+    title varchar(100),
+    descr varchar(255),
+    link varchar(255),
+    count int default 0
+);
