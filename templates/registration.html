@@ -1,4 +1,12 @@
 {% extends "index.html" %}
 {% block content %}
     <h1>Registration</h1>
+    <p>{{ message }}</p>
+    <form method="post">
+        <p><input type="text" name="login" placeholder="Login"></p>
+        <p><input type="text" name="email" placeholder="E-mail"></p>
+        <p><input type="password" name="pwd1" placeholder="Password"></p>
+        <p><input type="password" name="pwd2" placeholder="Repeat Password"></p>
+        <p><input type="submit" value="Ok"></p>
+    </form>
 {% endblock %}
