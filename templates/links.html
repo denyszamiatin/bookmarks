@@ -1,10 +1,11 @@
 {% extends "index.html" %}
 {% block content %}
     <h1>{{name}}'s links</h1>
-    <p><a href="/add">Add link</a></p>
+    {% if editable %}<p><a href="/add">Add link</a></p>{% endif %}
     {% for link in links %}
         <h3>{{link.1}}</h3>
         <p>{{link.2}}</p>
-        <p><a href="{{link.3}}">{{link.3}}</a></p>
+        <p><a href="/redirect/{{name}}?url={{link.3}}">{{link.3}}</a></p>
+        <p>Count: {{link.4}} {% if editable %}<a href="/delete/{{link.0}}">Delete</a>{% endif %}</p>
     {% endfor %}
 {% endblock %}

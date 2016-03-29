@@ -7,6 +7,12 @@ import oursql
 app = Flask(__name__)
 
 
+def get_user_name():
+    user_id = int(request.cookies['user_id'])
+    g.cursor.execute('select login from user where id={}'.format(user_id))
+    return g.cursor.fetchone()[0]
+
+
 @app.before_request
 def before_request():
     g.db = oursql.connect(db='bookmarks', user='root', passwd='1')
@@ -57,13 +63,14 @@ def register():
 
 @app.route('/links/<name>')
 def links(name):
-    user_id = int(request.cookies['user_id'])
-    g.cursor.execute("select id, title, descr, link, count"
-                     " from link where user={}".format(user_id))
+    g.cursor.execute("select link.id, title, descr, link, count"
+                     " from link, user where link.user=user.id and user.login='{}'"
+                     .format(name))
     return render_template(
         "links.html",
         name=name,
-        links=g.cursor.fetchall()
+        links=g.cursor.fetchall(),
+        editable=(name == get_user_name())
     )
 
 
@@ -78,10 +85,26 @@ def add():
             request.form['descr'],
             request.form['link']
         ))
-        g.cursor.execute('select login from user where id={}'.format(user_id))
-        user_name = g.cursor.fetchone()[0]
-        return redirect("/links/{}".format(user_name))
+        return redirect("/links/{}".format(get_user_name()))
     return render_template("add.html")
+
+
+@app.route('/redirect/<name>')
+def redir(name):
+    g.cursor.execute("select id from user where login='{}'".format(name))
+    user_id = g.cursor.fetchone()[0]
+    g.cursor.execute("update link set count=count+1"
+                     " where link='{}' and user={}".format(
+        request.args['url'],
+        user_id
+    ))
+    return redirect(request.args['url'])
+
+
+@app.route('/delete/<link_id>')
+def delete(link_id):
+    g.cursor.execute("delete from link where id={}".format(link_id))
+    return redirect("/links/{}".format(get_user_name()))
 
 
 if __name__ == '__main__':
