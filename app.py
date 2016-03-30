@@ -1,4 +1,7 @@
 # coding=utf-8
+import urllib
+
+import validators
 from flask import (Flask, render_template,
                    request, redirect, g, make_response)
 import oursql
@@ -81,29 +84,31 @@ def links(name):
 
 @app.route('/add', methods=['get', 'post'])
 def add():
+    title = descr = link = ""
     if request.method == 'POST':
-        user_id = int(request.cookies['user_id'])
-        g.cursor.execute("insert into link (user, title, descr, link)"
-                         " values ({},'{}', '{}', '{}')".format(
-            user_id,
-            request.form['title'],
-            request.form['descr'],
-            request.form['link']
-        ))
-        return redirect("/links/{}".format(get_user_name()))
-    return render_template("add.html")
+        title, descr, link = request.form['title'], request.form['descr'], request.form['link']
+        if title and descr and validators.url(link) is True:
+            user_id = int(request.cookies['user_id'])
+            g.cursor.execute("insert into link (user, title, descr, link)"
+                             " values ({},'{}', '{}', '{}')".format(
+                user_id,
+                request.form['title'],
+                request.form['descr'],
+                request.form['link']
+            ))
+            return redirect("/links/{}".format(get_user_name()))
+    return render_template("add.html", title=title, descr=descr, link=link)
 
 
-@app.route('/redirect/<name>')
-def redir(name):
-    g.cursor.execute("select id from user where login='{}'".format(name))
-    user_id = g.cursor.fetchone()[0]
+@app.route('/redirect/<name>/<link_id>')
+def redir(name, link_id):
+    g.cursor.execute("select link.id, link.link from user, link where login='{}' "
+                     "order by id limit {}, 1"
+                     .format(name, link_id))
+    link_id, url = g.cursor.fetchone()
     g.cursor.execute("update link set count=count+1"
-                     " where link='{}' and user={}".format(
-        request.args['url'],
-        user_id
-    ))
-    return redirect(request.args['url'])
+                     " where id='{}'".format(link_id))
+    return render_template("warning.html", url=urllib.unquote(url))
 
 
 @app.route('/delete/<link_id>')
