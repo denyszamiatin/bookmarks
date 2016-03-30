@@ -7,8 +7,12 @@ import oursql
 app = Flask(__name__)
 
 
+def get_user_id():
+    return int(request.cookies['user_id'])
+
+
 def get_user_name():
-    user_id = int(request.cookies['user_id'])
+    user_id = get_user_id()
     g.cursor.execute('select login from user where id={}'.format(user_id))
     return g.cursor.fetchone()[0]
 
@@ -65,6 +69,7 @@ def register():
 def links(name):
     g.cursor.execute("select link.id, title, descr, link, count"
                      " from link, user where link.user=user.id and user.login='{}'"
+                     " order by id"
                      .format(name))
     return render_template(
         "links.html",
@@ -103,7 +108,15 @@ def redir(name):
 
 @app.route('/delete/<link_id>')
 def delete(link_id):
+    user_id = get_user_id()
+    g.cursor.execute("select id from link where user={} limit {}, 1".format(
+        user_id,
+        link_id
+    ))
+    link_id = int(g.cursor.fetchone()[0])
     g.cursor.execute("delete from link where id={}".format(link_id))
+    g.cursor.close()
+    g.cursor = g.db.cursor()
     return redirect("/links/{}".format(get_user_name()))
 
 

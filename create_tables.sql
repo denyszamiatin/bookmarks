@@ -12,3 +12,8 @@ create table link (
     link varchar(255),
     count int default 0
 );
+create table link_hashes (
+    user int,
+    link int,
+    hash int
+);
