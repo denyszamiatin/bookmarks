@@ -17,3 +17,8 @@ create table link_hashes (
     link int,
     hash int
 );
+create table session (
+    user int,
+    session_id varchar(128) unique,
+    expires datetime
+);

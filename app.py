@@ -2,6 +2,8 @@
 import urllib
 import hashlib
 import random
+import datetime
+import re
 from oursql import IntegrityError
 
 import validators
@@ -14,12 +16,26 @@ import oursql
 app = Flask(__name__)
 
 
+def _get_user_id():
+    session_id = request.cookies.get('id', '')
+    # if not re.match('[0-9a-f]{128}', session_id):
+    #     return 0
+    g.cursor.close()
+    g.cursor = g.db.cursor()
+    g.cursor.execute("select user from session where session_id='{}'"
+                     " and expires > now()".format(session_id))
+    user = g.cursor.fetchone()
+    return int(user[0]) if user is not None else 0
+
+
 def get_user_id():
-    return int(request.cookies['user_id'])
+    return g.user_id
 
 
 def get_user_name():
     user_id = get_user_id()
+    g.cursor.close()
+    g.cursor = g.db.cursor()
     g.cursor.execute('select login from user where id={}'.format(user_id))
     return g.cursor.fetchone()[0]
 
@@ -42,12 +58,25 @@ def make_passwd(passwd):
 def before_request():
     g.db = oursql.connect(db='bookmarks', user='root', passwd='1')
     g.cursor = g.db.cursor()
+    g.user_id = _get_user_id()
 
 
 @app.teardown_request
 def teardown_request(exc):
     g.cursor.close()
     g.db.close()
+
+
+def login(resp, user_id):
+    g.cursor.execute("delete from session where user={}".format(user_id))
+    g.cursor.close()
+    g.cursor = g.db.cursor()
+    session_id = hashlib.sha512(str(random.random())).hexdigest()
+    g.cursor.execute("insert into session (user, session_id, expires) "
+                     "values ({}, '{}', '{}')".format(user_id, session_id,
+                                                   str(datetime.datetime.now() +
+                                                   datetime.timedelta(1))))
+    resp.set_cookie('id', session_id, httponly=True)
 
 
 @app.route('/', methods=['get', 'post'])
@@ -62,8 +91,9 @@ def index():
             if user is not None:
                 user_id, user_name, passwd = user
                 if check_passwd(request.form['pwd'], passwd):
+                    print "Ok"
                     resp = make_response(redirect('/links/{}'.format(user_name)))
-                    resp.set_cookie('user_id', str(user_id))
+                    login(resp, user_id)
                     return resp
     return render_template('index.html')
 
@@ -111,7 +141,7 @@ def add():
     if request.method == 'POST':
         title, descr, link = request.form['title'], request.form['descr'], request.form['link']
         if title and descr and validators.url(link) is True:
-            user_id = int(request.cookies['user_id'])
+            user_id = get_user_id()
             g.cursor.execute("insert into link (user, title, descr, link)"
                              " values ({},'{}', '{}', '{}')".format(
                 user_id,
@@ -125,10 +155,14 @@ def add():
 
 @app.route('/redirect/<name>/<link_id>')
 def redir(name, link_id):
+    g.cursor.close()
+    g.cursor = g.db.cursor()
     g.cursor.execute("select link.id, link.link from user, link where login='{}' "
                      "order by id limit {}, 1"
                      .format(name, link_id))
     link_id, url = g.cursor.fetchone()
+    g.cursor.close()
+    g.cursor = g.db.cursor()
     g.cursor.execute("update link set count=count+1"
                      " where id='{}'".format(link_id))
     return render_template("warning.html", url=urllib.unquote(url))
@@ -137,6 +171,8 @@ def redir(name, link_id):
 @app.route('/delete/<link_id>')
 def delete(link_id):
     user_id = get_user_id()
+    g.cursor.close()
+    g.cursor = g.db.cursor()
     g.cursor.execute("select id from link where user={} limit {}, 1".format(
         user_id,
         link_id

