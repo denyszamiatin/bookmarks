@@ -9,7 +9,7 @@ from oursql import IntegrityError
 import validators
 
 from flask import (Flask, render_template,
-                   request, redirect, g, make_response)
+                   request, redirect, g, make_response, abort)
 import oursql
 
 
@@ -22,9 +22,11 @@ def _get_user_id():
     #     return 0
     g.cursor.close()
     g.cursor = g.db.cursor()
-    g.cursor.execute("select user from session where session_id='{}'"
+    g.cursor.execute("select user, csrf_token from session where session_id='{}'"
                      " and expires > now()".format(session_id))
     user = g.cursor.fetchone()
+    if user is not None:
+        g.csrf_token = user[1]
     return int(user[0]) if user is not None else 0
 
 
@@ -72,10 +74,12 @@ def login(resp, user_id):
     g.cursor.close()
     g.cursor = g.db.cursor()
     session_id = hashlib.sha512(str(random.random())).hexdigest()
-    g.cursor.execute("insert into session (user, session_id, expires) "
-                     "values ({}, '{}', '{}')".format(user_id, session_id,
+    csrf_token = hashlib.sha512(str(random.random())).hexdigest()
+    g.cursor.execute("insert into session (user, session_id, expires, csrf_token) "
+                     "values ({}, '{}', '{}', '{}')".format(user_id, session_id,
                                                    str(datetime.datetime.now() +
-                                                   datetime.timedelta(1))))
+                                                   datetime.timedelta(1)),
+                                                   csrf_token))
     resp.set_cookie('id', session_id, httponly=True)
 
 
@@ -140,6 +144,8 @@ def add():
     title = descr = link = ""
     if request.method == 'POST':
         title, descr, link = request.form['title'], request.form['descr'], request.form['link']
+        if request.form.get('csrf_token', '') != g.csrf_token:
+            abort(400)
         if title and descr and validators.url(link) is True:
             user_id = get_user_id()
             g.cursor.execute("insert into link (user, title, descr, link)"
@@ -150,7 +156,8 @@ def add():
                 request.form['link']
             ))
             return redirect("/links/{}".format(get_user_name()))
-    return render_template("add.html", title=title, descr=descr, link=link)
+    return render_template("add.html", title=title, descr=descr, link=link,
+                           csrf_token=g.csrf_token)
 
 
 @app.route('/redirect/<name>/<link_id>')
