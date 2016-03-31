@@ -1,7 +1,11 @@
 # coding=utf-8
 import urllib
+import hashlib
+import random
+from oursql import IntegrityError
 
 import validators
+
 from flask import (Flask, render_template,
                    request, redirect, g, make_response)
 import oursql
@@ -20,6 +24,20 @@ def get_user_name():
     return g.cursor.fetchone()[0]
 
 
+def check_passwd(passwd, hash_passwd):
+    salt, pwd = hash_passwd[:64], hash_passwd[64:]
+    return _make_passwd(salt, passwd) == hash_passwd
+
+
+def _make_passwd(salt, passwd):
+    h = hashlib.sha256(salt + passwd)
+    return salt + h.hexdigest()
+
+
+def make_passwd(passwd):
+    r = hashlib.sha256(str(random.random()))
+    return _make_passwd(r.hexdigest(), passwd)
+
 @app.before_request
 def before_request():
     g.db = oursql.connect(db='bookmarks', user='root', passwd='1')
@@ -36,17 +54,17 @@ def teardown_request(exc):
 def index():
     if request.method == "POST":
         if request.form['login'] and request.form['pwd']:
-            g.cursor.execute("select id, login from user where login='{}' "
-                             "and passwd='{}'".format(
+            g.cursor.execute("select id, login, passwd from user where login='{}' "
+                             .format(
                 request.form['login'],
-                request.form['pwd']
             ))
             user = g.cursor.fetchone()
             if user is not None:
-                user_id, user_name = user
-                resp = make_response(redirect('/links/{}'.format(user_name)))
-                resp.set_cookie('user_id', str(user_id))
-                return resp
+                user_id, user_name, passwd = user
+                if check_passwd(request.form['pwd'], passwd):
+                    resp = make_response(redirect('/links/{}'.format(user_name)))
+                    resp.set_cookie('user_id', str(user_id))
+                    return resp
     return render_template('index.html')
 
 
@@ -58,11 +76,16 @@ def register():
             request.form['email'] and \
             request.form['pwd1'] and \
             request.form['pwd1'] == request.form['pwd2']:
-            g.cursor.execute(
-                "insert into user (login, email, passwd) values ('{}', '{}', '{}')"
-                .format(request.form['login'], request.form['email'], request.form['pwd1'])
-            )
-            return redirect('/')
+            try:
+                g.cursor.execute(
+                    "insert into user (login, email, passwd) values ('{}', '{}', '{}')"
+                    .format(request.form['login'], request.form['email'],
+                            make_passwd(request.form['pwd1']))
+                )
+            except IntegrityError:
+                message = "Invalid registration"
+            else:
+                return redirect('/')
         else:
             message = "Invalid registration"
     return render_template('registration.html', message=message)
