@@ -3,8 +3,8 @@
     <h1>{{name}}'s links</h1>
     {% if editable %}<p><a href="/add">Add link</a></p>{% endif %}
     {% for link in links %}
-        <h3>{{link.1}}</h3>
-        <p>{{link.2}}</p>
+        <h3>{{link.1|e}}</h3>
+        <p>{{link.2|e}}</p>
         <p><a href="/redirect/{{name}}/{{loop.index0}}">{{link.3}}</a></p>
         <p>Count: {{link.4}} {% if editable %}<a href="/delete/{{loop.index0}}">Delete</a>{% endif %}</p>
     {% endfor %}
