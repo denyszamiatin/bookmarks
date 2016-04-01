@@ -3,7 +3,7 @@
     <h1>Add link</h1>
     <form method="post">
         <p><input type="text" name="title" value="{{title}}" placeholder="Title"></p>
-        <p><input type="text" name="descr" value="{{descr}}" placeholder="Description"></p>
+        <p><input type="text" name="descr" value="{{descr}}" autocomplete="off" placeholder="Description"></p>
         <p><input type="text" name="link" value="{{link}}" placeholder="Link"></p>
         <input type="hidden" name="csrf_token" value="{{csrf_token}}">
         <p><input type="submit" value="Ok"></p>

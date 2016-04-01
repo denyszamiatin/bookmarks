@@ -14,17 +14,23 @@ import oursql
 
 
 app = Flask(__name__)
+app.jinja_env.autoescape = False
+
+
+def _get_cursor():
+    g.cursor.close()
+    g.cursor = g.db.cursor()
+    return g.cursor
 
 
 def _get_user_id():
     session_id = request.cookies.get('id', '')
     # if not re.match('[0-9a-f]{128}', session_id):
     #     return 0
-    g.cursor.close()
-    g.cursor = g.db.cursor()
-    g.cursor.execute("select user, csrf_token from session where session_id='{}'"
+    cursor = _get_cursor()
+    cursor.execute("select user, csrf_token from session where session_id='{}'"
                      " and expires > now()".format(session_id))
-    user = g.cursor.fetchone()
+    user = cursor.fetchone()
     if user is not None:
         g.csrf_token = user[1]
     return int(user[0]) if user is not None else 0
@@ -36,10 +42,9 @@ def get_user_id():
 
 def get_user_name():
     user_id = get_user_id()
-    g.cursor.close()
-    g.cursor = g.db.cursor()
-    g.cursor.execute('select login from user where id={}'.format(user_id))
-    return g.cursor.fetchone()[0]
+    cursor = _get_cursor()
+    cursor.execute('select login from user where id={}'.format(user_id))
+    return cursor.fetchone()[0]
 
 
 def check_passwd(passwd, hash_passwd):
@@ -56,6 +61,7 @@ def make_passwd(passwd):
     r = hashlib.sha256(str(random.random()))
     return _make_passwd(r.hexdigest(), passwd)
 
+
 @app.before_request
 def before_request():
     g.db = oursql.connect(db='bookmarks', user='root', passwd='1')
@@ -70,12 +76,12 @@ def teardown_request(exc):
 
 
 def login(resp, user_id):
-    g.cursor.execute("delete from session where user={}".format(user_id))
-    g.cursor.close()
-    g.cursor = g.db.cursor()
+    cursor = _get_cursor()
+    cursor.execute("delete from session where user={}".format(user_id))
+    cursor = _get_cursor()
     session_id = hashlib.sha512(str(random.random())).hexdigest()
     csrf_token = hashlib.sha512(str(random.random())).hexdigest()
-    g.cursor.execute("insert into session (user, session_id, expires, csrf_token) "
+    cursor.execute("insert into session (user, session_id, expires, csrf_token) "
                      "values ({}, '{}', '{}', '{}')".format(user_id, session_id,
                                                    str(datetime.datetime.now() +
                                                    datetime.timedelta(1)),
@@ -87,11 +93,12 @@ def login(resp, user_id):
 def index():
     if request.method == "POST":
         if request.form['login'] and request.form['pwd']:
-            g.cursor.execute("select id, login, passwd from user where login='{}' "
-                             .format(
-                request.form['login'],
-            ))
-            user = g.cursor.fetchone()
+
+            cursor = _get_cursor()
+            cursor.execute("select id, login, passwd from user where login=?",
+                           (request.form['login'], )
+            )
+            user = cursor.fetchone()
             if user is not None:
                 user_id, user_name, passwd = user
                 if check_passwd(request.form['pwd'], passwd):
@@ -111,7 +118,8 @@ def register():
             request.form['pwd1'] and \
             request.form['pwd1'] == request.form['pwd2']:
             try:
-                g.cursor.execute(
+                cursor = _get_cursor()
+                cursor.execute(
                     "insert into user (login, email, passwd) values ('{}', '{}', '{}')"
                     .format(request.form['login'], request.form['email'],
                             make_passwd(request.form['pwd1']))
@@ -127,14 +135,15 @@ def register():
 
 @app.route('/links/<name>')
 def links(name):
-    g.cursor.execute("select link.id, title, descr, link, count"
+    cursor = _get_cursor()
+    cursor.execute("select link.id, title, descr, link, count"
                      " from link, user where link.user=user.id and user.login='{}'"
                      " order by id"
                      .format(name))
     return render_template(
         "links.html",
         name=name,
-        links=g.cursor.fetchall(),
+        links=cursor.fetchall(),
         editable=(name == get_user_name())
     )
 
@@ -148,7 +157,8 @@ def add():
             abort(400)
         if title and descr and validators.url(link) is True:
             user_id = get_user_id()
-            g.cursor.execute("insert into link (user, title, descr, link)"
+            cursor = _get_cursor()
+            cursor.execute("insert into link (user, title, descr, link)"
                              " values ({},'{}', '{}', '{}')".format(
                 user_id,
                 request.form['title'],
@@ -162,15 +172,13 @@ def add():
 
 @app.route('/redirect/<name>/<link_id>')
 def redir(name, link_id):
-    g.cursor.close()
-    g.cursor = g.db.cursor()
-    g.cursor.execute("select link.id, link.link from user, link where login='{}' "
+    cursor = _get_cursor()
+    cursor.execute("select link.id, link.link from user, link where login='{}' "
                      "order by id limit {}, 1"
                      .format(name, link_id))
-    link_id, url = g.cursor.fetchone()
-    g.cursor.close()
-    g.cursor = g.db.cursor()
-    g.cursor.execute("update link set count=count+1"
+    link_id, url = cursor.fetchone()
+    cursor = _get_cursor()
+    cursor.execute("update link set count=count+1"
                      " where id='{}'".format(link_id))
     return render_template("warning.html", url=urllib.unquote(url))
 
@@ -178,16 +186,14 @@ def redir(name, link_id):
 @app.route('/delete/<link_id>')
 def delete(link_id):
     user_id = get_user_id()
-    g.cursor.close()
-    g.cursor = g.db.cursor()
-    g.cursor.execute("select id from link where user={} limit {}, 1".format(
+    cursor = _get_cursor()
+    cursor.execute("select id from link where user={} limit {}, 1".format(
         user_id,
         link_id
     ))
-    link_id = int(g.cursor.fetchone()[0])
-    g.cursor.execute("delete from link where id={}".format(link_id))
-    g.cursor.close()
-    g.cursor = g.db.cursor()
+    link_id = int(cursor.fetchone()[0])
+    cursor = _get_cursor()
+    cursor.execute("delete from link where id={}".format(link_id))
     return redirect("/links/{}".format(get_user_name()))
 
 
